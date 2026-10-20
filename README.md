@@ -11,6 +11,7 @@ Stations come from the free [Radio Browser](https://www.radio-browser.info) dire
 - Top stations, search by name, browse by country
 - Favorites (saved on the phone)
 - Keeps playing with the screen locked; lock-screen and Control Center play/pause
+- Next/previous buttons (lock screen, CarPlay Now Playing, steering wheel) switch between favorites
 - Remembers the last station, tab and country
 
 ## Install on iPhone
@@ -21,6 +22,12 @@ Stations come from the free [Radio Browser](https://www.radio-browser.info) dire
 3. Open that link in **Safari** on the iPhone.
 4. Tap **Share** → **Add to Home Screen** → **Add**.
 5. Open **Radio** from the Home Screen.
+
+## CarPlay
+
+Apple only lets native App Store / TestFlight apps put an icon on the CarPlay screen, so this web
+app cannot appear there. Its audio still plays through CarPlay: start a station on the phone, then
+open **Now Playing** in CarPlay to see the station and use play/pause and next/previous.
 
 ## Notes
 

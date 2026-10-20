@@ -1,6 +1,6 @@
 // Caches the app shell so it opens instantly from the Home Screen.
 // Station lists and audio streams always go to the network.
-const CACHE = 'radio-v1';
+const CACHE = 'radio-v2';
 const SHELL = [
   './',
   'index.html',

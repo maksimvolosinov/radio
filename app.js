@@ -6,7 +6,9 @@ const API_HOSTS = [
   'https://de2.api.radio-browser.info',
   'https://fi1.api.radio-browser.info',
   'https://nl1.api.radio-browser.info',
+  'https://at1.api.radio-browser.info',
 ];
+const API_TIMEOUT_MS = 8000;
 const PAGE_SIZE = 100;
 const FALLBACK_LOGO = 'icons/icon-192.png';
 
@@ -28,21 +30,39 @@ const store = {
 
 let favorites = store.get('favorites', []);
 let current = null;
+let queue = [];
 let tab = 'top';
 let requestId = 0;
+let apiHost = null;
+
+// A dead server would otherwise leave fetch hanging for minutes.
+async function fetchJson(url) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), API_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Ask every server at once and stick with whichever answers first.
+function findHost() {
+  return Promise.any(API_HOSTS.map((h) => fetchJson(h + '/json/stats').then(() => h)));
+}
 
 async function api(path) {
-  let lastError;
-  for (const host of API_HOSTS) {
+  for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const res = await fetch(host + path);
-      if (res.ok) return await res.json();
-      lastError = new Error('HTTP ' + res.status);
+      apiHost = apiHost || (await findHost());
+      return await fetchJson(apiHost + path);
     } catch (e) {
-      lastError = e;
+      apiHost = null;
+      if (attempt === 1) throw e;
     }
   }
-  throw lastError;
 }
 
 // iOS Safari blocks http:// audio on an https:// page, so keep only https streams.
@@ -88,10 +108,16 @@ async function load() {
     if (id !== requestId) return;
     statusEl.textContent = stations.length ? '' : 'No stations found.';
     render(stations);
-  } catch {
+  } catch (e) {
     if (id !== requestId) return;
-    statusEl.textContent = 'Could not load stations. Check your connection.';
+    statusEl.textContent = 'Could not load stations (' + errorText(e) + '). Tap a tab to retry.';
   }
+}
+
+function errorText(e) {
+  if (e instanceof AggregateError) return 'no station server reachable';
+  if (e && e.name === 'AbortError') return 'timed out';
+  return (e && e.message) || 'unknown error';
 }
 
 function slim(s) {
@@ -171,21 +197,23 @@ function render(stations) {
     });
 
     li.append(img, text, fav);
-    li.addEventListener('click', () => play(s));
+    li.addEventListener('click', () => play(s, stations));
     frag.append(li);
   }
   listEl.append(frag);
 }
 
-function play(s) {
+function play(s, list) {
   if (current && current.stationuuid === s.stationuuid) {
     togglePlay();
     return;
   }
+  if (list) queue = list.map(slim);
   current = slim(s);
   store.set('last', current);
   audio.src = current.url_resolved;
-  audio.play().catch(() => { $('np-info').textContent = 'Playback failed. Try another station.'; });
+  audio.load();
+  audio.play().catch(playFailed);
   document.querySelectorAll('.station').forEach((li) => {
     li.classList.toggle('playing', li.dataset.id === current.stationuuid);
   });
@@ -195,15 +223,35 @@ function play(s) {
   api('/json/url/' + current.stationuuid).catch(() => {});
 }
 
+function playFailed(e) {
+  // NotAllowedError means iOS wants a tap first; anything else is the stream itself.
+  $('np-info').textContent = e && e.name === 'NotAllowedError'
+    ? 'Tap ▶ to start playback.'
+    : 'This station would not play. Try another one.';
+  updatePlayerButton();
+}
+
 function togglePlay() {
   if (!current) return;
   if (audio.paused) {
     // Reload the stream so a resumed live station starts at "now", not where it was paused.
     audio.src = current.url_resolved;
-    audio.play().catch(() => {});
+    audio.load();
+    audio.play().catch(playFailed);
   } else {
     audio.pause();
   }
+}
+
+// Skip buttons (lock screen, CarPlay, steering wheel) step through favorites,
+// or through the list the station was picked from when there are no favorites.
+function skip(step) {
+  const list = favorites.length ? favorites : queue;
+  if (!list.length) return;
+  const i = current ? list.findIndex((s) => s.stationuuid === current.stationuuid) : -1;
+  const next = list[(i + step + list.length) % list.length];
+  current = null;
+  play(next);
 }
 
 function updatePlayer() {
@@ -212,9 +260,14 @@ function updatePlayer() {
   logo($('np-logo'), current);
   $('np-name').textContent = current.name;
   $('np-info').textContent = info(current);
-  $('np-toggle').textContent = audio.paused ? '▶' : '❚❚';
+  updatePlayerButton();
   $('np-fav').textContent = isFavorite(current) ? '★' : '☆';
   $('np-fav').classList.toggle('on', isFavorite(current));
+}
+
+function updatePlayerButton() {
+  $('np-toggle').textContent = audio.paused ? '▶' : '❚❚';
+  if ('mediaSession' in navigator) navigator.mediaSession.playbackState = audio.paused ? 'paused' : 'playing';
 }
 
 function updateMediaSession() {
@@ -230,14 +283,17 @@ function updateMediaSession() {
 if ('mediaSession' in navigator) {
   navigator.mediaSession.setActionHandler('play', togglePlay);
   navigator.mediaSession.setActionHandler('pause', () => audio.pause());
+  navigator.mediaSession.setActionHandler('stop', () => audio.pause());
+  navigator.mediaSession.setActionHandler('nexttrack', () => skip(1));
+  navigator.mediaSession.setActionHandler('previoustrack', () => skip(-1));
 }
 
 audio.addEventListener('playing', updatePlayer);
-audio.addEventListener('pause', updatePlayer);
+audio.addEventListener('pause', updatePlayerButton);
 audio.addEventListener('waiting', () => { $('np-info').textContent = 'Buffering…'; });
 audio.addEventListener('error', () => {
-  if (audio.getAttribute('src')) $('np-info').textContent = 'Stream unavailable. Try another station.';
-  updatePlayer();
+  if (audio.getAttribute('src')) $('np-info').textContent = 'This station is offline right now. Try another one.';
+  updatePlayerButton();
 });
 
 $('np-toggle').addEventListener('click', togglePlay);
