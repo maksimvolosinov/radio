@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Radio</title>
+  <meta name="theme-color" content="#0f1115">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Radio">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Radio</h1>
+    <nav class="tabs" role="tablist">
+      <button data-tab="top" class="active">Top</button>
+      <button data-tab="country">Country</button>
+      <button data-tab="favorites">Favorites</button>
+    </nav>
+    <div class="controls">
+      <input id="search" type="search" placeholder="Search stations" autocomplete="off" enterkeyhint="search">
+      <select id="country" hidden></select>
+    </div>
+  </header>
+
+  <main>
+    <p id="status" class="status"></p>
+    <ul id="list" class="list"></ul>
+  </main>
+
+  <footer id="player" class="player" hidden>
+    <img id="np-logo" alt="">
+    <div class="np-text">
+      <div id="np-name" class="np-name"></div>
+      <div id="np-info" class="np-info"></div>
+    </div>
+    <button id="np-fav" class="icon-btn" aria-label="Favorite">☆</button>
+    <button id="np-toggle" class="icon-btn play" aria-label="Play/Pause">▶</button>
+  </footer>
+
+  <audio id="audio" preload="none" playsinline></audio>
+  <script src="app.js"></script>
+</body>
+</html>
